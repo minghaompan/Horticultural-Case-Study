@@ -1,0 +1,1 @@
+To simulate peat prices in Alberta, I first fit the distribution to prices denominated in $/tonne and subsequently converted them to $/cubic meter.
