@@ -37,11 +37,11 @@ yield_draws <- depth_draws * m_to_yield  # t/ha (assuming 1 t/m^3)
 yield_df <- data.frame(
   year      = rep(seq_len(n_years), times = n_sims),
   iteration = rep(seq_len(n_sims), each  = n_years),
-  yield_t_ha = as.vector(yield_draws)
+  yield = as.vector(yield_draws)
 )
 
 # ----- PER-YEAR SUMMARY ACROSS SIMS -----
-year_stats <- aggregate(yield_t_ha ~ year, data = yield_df, FUN = function(x) {
+year_stats <- aggregate(yield ~ year, data = yield_df, FUN = function(x) {
   c(
     mean = mean(x),
     sd   = sd(x),
@@ -53,17 +53,17 @@ year_stats <- aggregate(yield_t_ha ~ year, data = yield_df, FUN = function(x) {
 
 # Unpack the matrix column safely
 tmp <- year_stats
-year_stats <- cbind(year = tmp$year, as.data.frame(tmp$yield_t_ha))
+year_stats <- cbind(year = tmp$year, as.data.frame(tmp$yield))
 names(year_stats) <- c("year", "mean", "sd", "p10", "p50", "p90")
 
 # ----- QUICK PEEKS -----
 head(yield_df)      # long table of simulated yearly yields (t/ha)
 head(year_stats)    # per-year stats
 summary(yield_df)
-sapply(yield_df["yield_t_ha"], sd, na.rm = TRUE)
+sapply(yield_df["yield"], sd, na.rm = TRUE)
 
 write.csv(
-  sim_df[, c("year", "iteration", "price_m3")],
+  yield_df[, c("year", "iteration", "yield")],
   "data/simulated_peat_volume_triangular.csv",
   row.names = FALSE
 )
