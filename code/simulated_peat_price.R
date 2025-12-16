@@ -72,14 +72,10 @@ sim_draws_t <- pmin(pmax(sim_draws_t, lo), hi)
 start_year <- if ("year" %in% names(data)) max(data$year, na.rm = TRUE) + 1 else 1
 yrs <- seq(from = start_year, length.out = n_years)
 
-# Bulk density: tonnes per cubic meter (t/m3)
-bulk_density_t_per_m3 <- 0.168
-
 sim_df <- data.frame(
   year      = rep(yrs, times = n_iter),
   iteration = rep(seq_len(n_iter), each = n_years),
-  price_t     = sim_draws_t,
-  price_m3   = sim_draws_t * bulk_density_t_per_m3 
+  price_t     = sim_draws_t
 )
 summary(sim_df)
 
@@ -87,16 +83,16 @@ sapply(sim_df, sd, na.rm = TRUE)
 
 # --- 6) Simple diagnostics ---
 par(mfrow = c(1, 2))
-hist(sim_df$price_m3, breaks = 40,
-     main = "Simulated Peat Prices ($/m3, Converted)", xlab = "Price ($/m3)")
-boxplot(price_m3 ~ year, data = sim_df, outline = FALSE,
+hist(sim_df$price_t, breaks = 40,
+     main = "Simulated Peat Prices ($/t)", xlab = "Price ($/t)")
+boxplot(price_t ~ year, data = sim_df, outline = FALSE,
         main = "Yearly distribution across iterations",
         xlab = "Year", ylab = "Price")
 par(mfrow = c(1, 1))
 
 write.csv(
-  sim_df[, c("year", "iteration", "price_m3")],
-  "data/simulated_peat_prices_lognormal_m3.csv",
+  sim_df[, c("year", "iteration", "price_t")],
+  "data/simulated_peat_prices_lognormal_t.csv",
   row.names = FALSE
 )
 

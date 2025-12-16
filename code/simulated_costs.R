@@ -13,7 +13,6 @@ iterations <- 1000
 
 set.seed(123)  # reproducibility
 
-bulk_density_t_per_m3 <- 0.168   # t per m^3
 
 # Simulate in long format directly
 sim_df <- expand.grid(
@@ -23,8 +22,7 @@ sim_df <- expand.grid(
   mutate(costs = rtriangle(n = n(),
                            a = min_cost,
                            b = max_cost,
-                           c = mode_cost),
-         costs_m3 = costs * bulk_density_t_per_m3)
+                           c = mode_cost))
 
 # Preview first 20 rows
 head(sim_df, 20)
@@ -32,7 +30,7 @@ summary(sim_df)
 sapply(sim_df, sd, na.rm = TRUE)
 
 write.csv(
-  sim_df[, c("year", "iteration", "costs_m3")],
-  "data/simulated_costs_m3.csv",
+  sim_df[, c("year", "iteration", "costs")],
+  "data/simulated_costs.csv",
   row.names = FALSE
 )

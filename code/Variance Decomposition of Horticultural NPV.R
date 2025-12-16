@@ -28,7 +28,7 @@ colnames(data) <- tolower(colnames(data))
 # --------------------------
 costs_data  <- read.csv("data/simulated_costs_m3.csv")
 prices_data <- read.csv("data/simulated_peat_prices_lognormal_m3.csv")
-yield_data  <- read.csv("data/simulated_peat_volume_triangular.csv")
+yield_data  <- read.csv("data/simulated_peat_volume_compressed.csv")
 
 # Ensure integer types for joins/sorting
 costs_data  <- dplyr::mutate(costs_data,  iteration = as.integer(iteration), year = as.integer(year))
@@ -107,6 +107,8 @@ freight_draws <- iy_grid |>
   ) |>
   dplyr::transmute(iteration, year, freight_per_m3 = c_leg1_m3 + c_leg2_m3)
 
+summary(freight_draws)
+
 # --------------------------
 # 5) Merge series and compute annual cash flows (baseline)
 # --------------------------
@@ -161,6 +163,12 @@ positive_fraction_ha <- mean(NPV_results$NPV_per_ha > 0)
 
 cat(sprintf("\n--- Baseline ---\nMean NPV per ha: %.2f\nSD NPV per ha: %.2f\nProportion NPV>0: %.3f\n",
             mean_NPV_per_ha, sd_NPV, positive_fraction_ha))
+
+hist(
+  NPV_results$NPV_per_ha, breaks = 30,
+  main = "Distribution of NPV per hectare",
+  xlab = "NPV per ha ($)"
+)
 
 options(scipen = 999)
 
