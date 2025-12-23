@@ -34,12 +34,14 @@ vol_conv <- vol %>%
   select(year, iteration, harv_m3_ha, mass_t_ha, bd_tpm3, yield)
 
 summary(vol_conv)
+sapply(vol_conv, sd, na.rm = TRUE)
 
 write.csv(
   vol_conv[, c("year", "iteration", "yield")],
   "data/simulated_peat_volume_compressed.csv",
   row.names = FALSE
 )
+
 
 # ----------------------------
 # 3) Convert price ($/t -> $/m3 using simulated bd) and save
@@ -50,6 +52,7 @@ price_conv <- price %>%
   select(year, iteration, price_t, bd_tpm3, price_m3)
 
 summary(price_conv)
+sapply(price_conv, sd, na.rm = TRUE)
 
 write.csv(
   price_conv [, c("year", "iteration", "price_m3")],
@@ -67,6 +70,7 @@ costs_conv <- costs %>%
   select(year, iteration, costs, bd_tpm3, costs_m3)
 
 summary(costs_conv)
+sapply(costs_conv, sd, na.rm = TRUE)
 
 write.csv(
   costs_conv [, c("year", "iteration", "costs_m3")],

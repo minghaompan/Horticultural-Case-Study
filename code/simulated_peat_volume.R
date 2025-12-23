@@ -60,7 +60,7 @@ names(year_stats) <- c("year", "mean", "sd", "p10", "p50", "p90")
 head(yield_df)      # long table of simulated yearly yields (t/ha)
 head(year_stats)    # per-year stats
 summary(yield_df)
-sapply(yield_df["yield"], sd, na.rm = TRUE)
+sapply(yield_df, sd, na.rm = TRUE)
 
 write.csv(
   yield_df[, c("year", "iteration", "yield")],

@@ -132,6 +132,9 @@ freight_draws <- iy_grid |>
   ) |>
   select(iteration, year, is_CA, freight1_m3_fluffy, freight2_m3_compressed)
 
+summary(freight_draws)
+sapply(freight_draws, sd, na.rm = TRUE)
+
 # --------------------------
 # 6) Baseline cash flows
 # --------------------------
@@ -164,6 +167,10 @@ all_data <- base_panel |>
     discounted_net_cash = net_cash / discount_factor
   )
 
+
+summary(all_data)
+sapply(all_data, sd, na.rm = TRUE)
+
 pv_flows <- all_data |>
   group_by(iteration) |>
   summarise(PV_net_cash = sum(discounted_net_cash), .groups = "drop")
@@ -181,6 +188,11 @@ print(summary(NPV_results$NPV_per_ha))
 cat("Mean:", mean(NPV_results$NPV_per_ha, na.rm = TRUE), "\n")
 cat("SD:",   sd(NPV_results$NPV_per_ha,   na.rm = TRUE), "\n")
 cat("P(NPV>0):", mean(NPV_results$NPV_per_ha > 0, na.rm = TRUE), "\n")
+hist(
+  NPV_results$NPV_per_ha, breaks = 30,
+  main = "Distribution of NPV per hectare",
+  xlab = "NPV per ha ($)"
+)
 
 # ============================================================
 # 7) Variance decomposition (fix inputs to mean paths)
@@ -405,3 +417,15 @@ floor_sd_tbl <- tibble(
 
 cat("\n--- Price-floor scenarios: SD and Mean of NPV/ha ---\n")
 print(floor_sd_tbl)
+
+summary(NPV_floor_margin_noR$NPV_per_ha)
+sd_NPV <- sd(NPV_floor_margin_noR$NPV_per_ha, na.rm = TRUE)
+mean_NPV_per_ha      <- mean(NPV_floor_margin_noR$NPV_per_ha)
+positive_fraction_ha <- mean(NPV_floor_margin_noR$NPV_per_ha > 0)
+cat(sprintf("Mean NPV per ha: %.2f\nSD NPV per ha: %.2f\nProportion NPV>0: %.3f\n",
+            mean_NPV_per_ha, sd_NPV, positive_fraction_ha))
+hist(
+  NPV_floor_margin_noR$NPV_per_ha, breaks = 30,
+  main = "Distribution of NPV per hectare (price threshold = variable + freight costs)",
+  xlab = "NPV per ha ($)"
+)
