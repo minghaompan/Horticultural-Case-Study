@@ -9,7 +9,7 @@ set.seed(123)
 
 # ----- PARAMETERS (from your figure) -----
 depth_min  <- 0.05   # m
-depth_mode <- 0.086  # m (treat "Average" as the triangular mode)
+depth_average <- 0.086  # m (treat "Average" as the triangular average)
 depth_max  <- 0.14   # m
 
 area_per_ha <- 10000   # m^2 per ha
@@ -17,7 +17,7 @@ m_to_yield  <- area_per_ha  # depth (m) * 10,000 = m^3/ha (≈ t/ha if density =
 
 # Optional checks (t/ha or m^3/ha)
 yield_min  <- depth_min  * m_to_yield
-yield_mode <- depth_mode * m_to_yield
+yield_average <- depth_average * m_to_yield
 yield_max  <- depth_max  * m_to_yield
 
 # ----- SIM SETTINGS -----
@@ -25,9 +25,9 @@ n_sims  <- 1000
 n_years <- 18
 
 # ----- SIMULATE DEPTHS, CONVERT TO YIELDS (t/ha) -----
-# rtriangle(n, a = min, b = max, c = mode)
+# rtriangle(n, a = min, b = max, c = average)
 depth_draws <- matrix(
-  rtriangle(n_sims * n_years, a = depth_min, b = depth_max, c = depth_mode),
+  rtriangle(n_sims * n_years, a = depth_min, b = depth_max, c = depth_average),
   nrow = n_sims, ncol = n_years, byrow = TRUE
 )
 

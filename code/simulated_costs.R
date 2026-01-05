@@ -5,7 +5,7 @@ library(writexl)
 
 # Parameters from your table
 min_cost <- 102.42
-mode_cost <- 162.42  # average or mode
+average_cost <- 162.42  # average
 max_cost <- 209.87
 
 years <- 18
@@ -22,7 +22,7 @@ sim_df <- expand.grid(
   mutate(costs = rtriangle(n = n(),
                            a = min_cost,
                            b = max_cost,
-                           c = mode_cost))
+                           c = average_cost))
 
 # Preview first 20 rows
 head(sim_df, 20)
