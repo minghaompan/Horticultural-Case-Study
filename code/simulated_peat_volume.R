@@ -37,11 +37,11 @@ yield_draws <- depth_draws * m_to_yield  # t/ha (assuming 1 t/m^3)
 yield_df <- data.frame(
   year      = rep(seq_len(n_years), times = n_sims),
   iteration = rep(seq_len(n_sims), each  = n_years),
-  yield = as.vector(yield_draws)
+  yield_m3 = as.vector(yield_draws)
 )
 
 # ----- PER-YEAR SUMMARY ACROSS SIMS -----
-year_stats <- aggregate(yield ~ year, data = yield_df, FUN = function(x) {
+year_stats <- aggregate(yield_m3 ~ year, data = yield_df, FUN = function(x) {
   c(
     mean = mean(x),
     sd   = sd(x),
@@ -56,6 +56,19 @@ tmp <- year_stats
 year_stats <- cbind(year = tmp$year, as.data.frame(tmp$yield))
 names(year_stats) <- c("year", "mean", "sd", "p10", "p50", "p90")
 
+
+# ---- Convert simulated volume (m3/ha) to bales and tons (your screenshot formula) ----
+bale_ft3           <- 6
+compression_factor <- 2
+ft3_to_m3          <- 0.028317
+bales_per_ton      <- 26
+
+m3_per_bale_loose <- bale_ft3 * compression_factor * ft3_to_m3
+m3_per_ton_loose  <- m3_per_bale_loose * bales_per_ton   # = 8.834904 m3 per ton
+
+# yield_df$yield is your simulated volume (m3/ha)
+yield_df$yield_t<- yield_df$yield / m3_per_ton_loose
+
 # ----- QUICK PEEKS -----
 head(yield_df)      # long table of simulated yearly yields (t/ha)
 head(year_stats)    # per-year stats
@@ -63,7 +76,13 @@ summary(yield_df)
 sapply(yield_df, sd, na.rm = TRUE)
 
 write.csv(
-  yield_df[, c("year", "iteration", "yield")],
-  "data/simulated_peat_volume_triangular.csv",
+  yield_df[, c("year", "iteration", "yield_m3")],
+  "data/simulated_peat_volume_m3.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  yield_df[, c("year", "iteration","yield_t" )],
+  "data/simulated_peat_volume_t.csv",
   row.names = FALSE
 )
