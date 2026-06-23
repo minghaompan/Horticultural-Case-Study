@@ -40,7 +40,7 @@ costs_data  <- read.csv("data/simulated_costs_m3.csv")
 prices_data <- read.csv("data/simulated_peat_prices_lognormal_m3.csv")
 
 yield_compressed <- read.csv("data/simulated_peat_volume_compressed.csv")      # m3/ha (compressed)
-yield_fluf       <- read.csv("data/simulated_peat_volume_triangular.csv")      # m3/ha (fluffy)
+yield_fluf       <- read.csv("data/simulated_peat_volume_m3.csv")      # m3/ha (fluffy)
 
 # Ensure types
 costs_data       <- costs_data       |> mutate(iteration = as.integer(iteration), year = as.integer(year))
@@ -50,7 +50,7 @@ yield_fluf       <- yield_fluf       |> mutate(iteration = as.integer(iteration)
 
 # Standardize names
 yield_compressed <- yield_compressed |> rename(compressed_m3_ha = yield)
-yield_fluf       <- yield_fluf       |> rename(fluffy_m3_ha     = yield)
+yield_fluf       <- yield_fluf       |> rename(fluffy_m3_ha     = yield_m3)
 
 # Build a balanced base panel (intersection of all series)
 base_panel <- prices_data |> select(iteration, year, price_m3) |>
