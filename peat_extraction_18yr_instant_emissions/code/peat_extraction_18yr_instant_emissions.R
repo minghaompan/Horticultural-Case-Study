@@ -17,7 +17,6 @@ suppressPackageStartupMessages({
   library(fitdistrplus)
   library(actuar)
 })
-123
 set.seed(123)
 
 
