@@ -348,8 +348,8 @@ initial_df <- tibble::tibble(
   iteration = iter_ids,
   initial_cost_equipment = stats::runif(
     n = n_iter_actual,
-    min = 2051500,
-    max = 2653000
+    min = 1843694,
+    max = 2703888
   ),
   env_app_cost = stats::runif(
     n = n_iter_actual,
@@ -784,11 +784,12 @@ run_project_scenario <- function(price_mult = 1,
       by = "iteration"
     ) %>%
     dplyr::mutate(
-      BEP = ifelse(
+      NPV_used_for_BEP_per_ha = ifelse(
         NPV_per_ha > 0,
-        NPV_per_ha / PV_tCO2e_per_ha,
+        NPV_per_ha,
         NA_real_
-      )
+      ),
+      BEP = NPV_used_for_BEP_per_ha / PV_tCO2e_per_ha
     )
   
   summary_row <- tibble::tibble(
@@ -802,6 +803,14 @@ run_project_scenario <- function(price_mult = 1,
     p90_NPV_per_ha  = as.numeric(stats::quantile(npv_results$NPV_per_ha, 0.90, na.rm = TRUE)),
     max_NPV_per_ha  = max(npv_results$NPV_per_ha, na.rm = TRUE),
     p_NPV_positive  = mean(npv_results$NPV_per_ha > 0, na.rm = TRUE),
+    
+    mean_NPV_used_for_BEP_per_ha = mean(bep_results$NPV_used_for_BEP_per_ha, na.rm = TRUE),
+    sd_NPV_used_for_BEP_per_ha   = stats::sd(bep_results$NPV_used_for_BEP_per_ha, na.rm = TRUE),
+    min_NPV_used_for_BEP_per_ha  = min(bep_results$NPV_used_for_BEP_per_ha, na.rm = TRUE),
+    p10_NPV_used_for_BEP_per_ha  = as.numeric(stats::quantile(bep_results$NPV_used_for_BEP_per_ha, 0.10, na.rm = TRUE)),
+    p50_NPV_used_for_BEP_per_ha  = as.numeric(stats::quantile(bep_results$NPV_used_for_BEP_per_ha, 0.50, na.rm = TRUE)),
+    p90_NPV_used_for_BEP_per_ha  = as.numeric(stats::quantile(bep_results$NPV_used_for_BEP_per_ha, 0.90, na.rm = TRUE)),
+    max_NPV_used_for_BEP_per_ha  = max(bep_results$NPV_used_for_BEP_per_ha, na.rm = TRUE),
     
     mean_BEP = mean(bep_results$BEP, na.rm = TRUE),
     sd_BEP   = stats::sd(bep_results$BEP, na.rm = TRUE),
@@ -987,6 +996,10 @@ baseline_max_npv <- sensitivity_summary$max_NPV_per_ha[
   sensitivity_summary$scenario == "Baseline"
 ]
 
+baseline_mean_npv_used_for_bep <- sensitivity_summary$mean_NPV_used_for_BEP_per_ha[
+  sensitivity_summary$scenario == "Baseline"
+]
+
 baseline_mean_bep <- sensitivity_summary$mean_BEP[
   sensitivity_summary$scenario == "Baseline"
 ]
@@ -998,6 +1011,11 @@ sensitivity_summary <- sensitivity_summary %>%
     
     delta_max_NPV_per_ha = max_NPV_per_ha - baseline_max_npv,
     pct_change_max_NPV   = 100 * (max_NPV_per_ha / baseline_max_npv - 1),
+    
+    delta_mean_NPV_used_for_BEP_per_ha =
+      mean_NPV_used_for_BEP_per_ha - baseline_mean_npv_used_for_bep,
+    pct_change_mean_NPV_used_for_BEP =
+      100 * (mean_NPV_used_for_BEP_per_ha / baseline_mean_npv_used_for_bep - 1),
     
     delta_mean_BEP      = mean_BEP - baseline_mean_bep,
     pct_change_mean_BEP = 100 * (mean_BEP / baseline_mean_bep - 1)
@@ -1197,4 +1215,3 @@ cat("\nBase panel dimensions:\n")
 print(dim(base_panel))
 
 cat("\nDone. Output CSV files were saved in the project-specific output_data_dir folder.\n")
-
