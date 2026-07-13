@@ -1,6 +1,9 @@
 # ============================================================
-# Mean NPV sensitivity-check bar chart
+# Mean NPV sensitivity bar chart
 # 18-year and 30-year peat extraction projects
+#
+# Higher and lower settings refer to the parameter value,
+# not to the resulting NPV.
 # ============================================================
 
 suppressPackageStartupMessages({
@@ -10,8 +13,10 @@ suppressPackageStartupMessages({
 })
 
 # ============================================================
-# 1. File paths and settings
+# 1. Settings
 # ============================================================
+
+onsite_EF_for_NPV <- 1.4
 
 sensitivity_18_path <- file.path(
   "peat_extraction_18yr_discounted_emissions",
@@ -25,42 +30,167 @@ sensitivity_30_path <- file.path(
   "sensitivity_summary.csv"
 )
 
-output_path <- file.path(
+output_png_path <- file.path(
   "figures",
-  "npv_sensitivity_bar_18_30.png"
+  "npv_sensitivity_bar_18_30_parameter_settings.png"
 )
 
-output_tiff_path <- file.path(
-  "figures",
-  "npv_sensitivity_bar_18_30.tiff"
-)
 
 project_levels <- c(
   "18-year project",
   "30-year project"
 )
 
-sensitivity_colors <- c(
-  "Higher-NPV case" = "#0072B2",
-  "Lower-NPV case"  = "#D55E00"
+driver_levels <- c(
+  "Peat price",
+  "Operating cost",
+  "Freight cost",
+  "Discount rate",
+  "Peat yield"
+)
+
+case_levels <- c(
+  "Higher parameter setting",
+  "Lower parameter setting"
+)
+
+case_colors <- c(
+  "Higher parameter setting" = "#0072B2",
+  "Lower parameter setting"  = "#D55E00"
+)
+
+# Higher and lower refer to the numerical parameter value.
+scenario_lookup <- tibble::tribble(
+  ~scenario,              ~driver,           ~scenario_level, ~sensitivity_case,
+  "Price +15%",           "Peat price",       "+15%",          "Higher parameter setting",
+  "Price -15%",           "Peat price",       "-15%",          "Lower parameter setting",
+  "Operating cost +15%",  "Operating cost",   "+15%",          "Higher parameter setting",
+  "Operating cost -15%",  "Operating cost",   "-15%",          "Lower parameter setting",
+  "Freight +15%",         "Freight cost",     "+15%",          "Higher parameter setting",
+  "Freight -15%",         "Freight cost",     "-15%",          "Lower parameter setting",
+  "Discount rate 10%",    "Discount rate",    "10%",           "Higher parameter setting",
+  "Discount rate 3%",     "Discount rate",    "3%",            "Lower parameter setting",
+  "Yield +15%",           "Peat yield",       "+15%",          "Higher parameter setting",
+  "Yield -15%",           "Peat yield",       "-15%",          "Lower parameter setting"
 )
 
 # ============================================================
-# 2. Load sensitivity summaries
+# 2. Helper functions
 # ============================================================
 
-sensitivity_18 <- utils::read.csv(sensitivity_18_path) %>%
-  dplyr::mutate(project = "18-year project")
+read_sensitivity_summary <- function(
+    path,
+    project_label,
+    onsite_ef_value = 1.4
+) {
+  
+  df <- utils::read.csv(
+    path,
+    stringsAsFactors = FALSE
+  ) %>%
+    dplyr::mutate(
+      project = project_label,
+      scenario = trimws(scenario)
+    )
+  
+  if ("EF_onsite_tC_ha_yr" %in% names(df)) {
+    df <- df %>%
+      dplyr::mutate(
+        EF_onsite_tC_ha_yr = as.numeric(EF_onsite_tC_ha_yr)
+      ) %>%
+      dplyr::filter(
+        abs(EF_onsite_tC_ha_yr - onsite_ef_value) < 1e-8
+      )
+  }
+  
+  df %>%
+    dplyr::distinct(
+      project,
+      scenario,
+      .keep_all = TRUE
+    )
+}
 
-sensitivity_30 <- utils::read.csv(sensitivity_30_path) %>%
-  dplyr::mutate(project = "30-year project")
+common_plot_theme <- function() {
+  theme_classic(base_size = 12) +
+    theme(
+      legend.position = "top",
+      legend.justification = "center",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      legend.key = element_blank(),
+      legend.key.width = grid::unit(0.90, "cm"),
+      legend.key.height = grid::unit(0.50, "cm"),
+      legend.text = element_text(size = 10.5),
+      
+      strip.background = element_blank(),
+      strip.text = element_text(
+        face = "bold",
+        size = 12,
+        lineheight = 1.08
+      ),
+      
+      axis.text = element_text(
+        color = "black",
+        size = 10.5
+      ),
+      axis.title.x = element_text(size = 12),
+      axis.line = element_blank(),
+      axis.ticks = element_line(
+        color = "grey45",
+        linewidth = 0.40
+      ),
+      
+      panel.border = element_rect(
+        color = "grey35",
+        fill = NA,
+        linewidth = 0.70
+      ),
+      panel.grid.major.x = element_line(
+        color = "grey80",
+        linewidth = 0.45
+      ),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.spacing = grid::unit(0.8, "lines"),
+      
+      plot.caption = element_text(
+        hjust = 0,
+        size = 9.0,
+        color = "grey25",
+        lineheight = 1.1
+      ),
+      
+      plot.margin = margin(
+        t = 10,
+        r = 42,
+        b = 14,
+        l = 10
+      )
+    )
+}
+
+# ============================================================
+# 3. Load sensitivity results
+# ============================================================
 
 sensitivity_all <- dplyr::bind_rows(
-  sensitivity_18,
-  sensitivity_30
+  read_sensitivity_summary(
+    sensitivity_18_path,
+    "18-year project",
+    onsite_EF_for_NPV
+  ),
+  read_sensitivity_summary(
+    sensitivity_30_path,
+    "30-year project",
+    onsite_EF_for_NPV
+  )
 ) %>%
   dplyr::mutate(
-    project = factor(project, levels = project_levels),
+    project = factor(
+      project,
+      levels = project_levels
+    ),
     mean_NPV_per_ha = as.numeric(mean_NPV_per_ha),
     p_NPV_positive = as.numeric(p_NPV_positive),
     p_NPV_positive = dplyr::if_else(
@@ -70,8 +200,28 @@ sensitivity_all <- dplyr::bind_rows(
     )
   )
 
+# Check that all required columns are present.
+required_columns <- c(
+  "project",
+  "scenario",
+  "mean_NPV_per_ha",
+  "p_NPV_positive"
+)
+
+missing_columns <- setdiff(
+  required_columns,
+  names(sensitivity_all)
+)
+
+if (length(missing_columns) > 0) {
+  stop(
+    "The following required columns are missing: ",
+    paste(missing_columns, collapse = ", ")
+  )
+}
+
 # ============================================================
-# 3. Prepare plotting data
+# 4. Prepare baseline values
 # ============================================================
 
 baseline_values <- sensitivity_all %>%
@@ -80,8 +230,57 @@ baseline_values <- sensitivity_all %>%
     project,
     baseline_mean_NPV_per_ha = mean_NPV_per_ha,
     baseline_mean_NPV_thousand_ha = mean_NPV_per_ha / 1000,
-    baseline_p_NPV_positive = p_NPV_positive
+    baseline_p_NPV_positive = p_NPV_positive,
+    panel = paste0(
+      as.character(project),
+      "\nBaseline mean NPV = ",
+      scales::dollar(
+        mean_NPV_per_ha,
+        accuracy = 1
+      ),
+      "/ha",
+      "\nBaseline P(NPV > 0) = ",
+      scales::percent(
+        p_NPV_positive,
+        accuracy = 0.1
+      )
+    )
   )
+
+if (nrow(baseline_values) != length(project_levels)) {
+  stop(
+    "A single Baseline row must be available for each project."
+  )
+}
+
+panel_levels <- baseline_values %>%
+  dplyr::arrange(project) %>%
+  dplyr::pull(panel)
+
+# ============================================================
+# 5. Check sensitivity scenario names
+# ============================================================
+
+unmatched_scenarios <- sensitivity_all %>%
+  dplyr::filter(scenario != "Baseline") %>%
+  dplyr::distinct(scenario) %>%
+  dplyr::anti_join(
+    scenario_lookup,
+    by = "scenario"
+  )
+
+if (nrow(unmatched_scenarios) > 0) {
+  stop(
+    paste0(
+      "The following scenarios do not match scenario_lookup: ",
+      paste(unmatched_scenarios$scenario, collapse = ", ")
+    )
+  )
+}
+
+# ============================================================
+# 6. Prepare plotting data
+# ============================================================
 
 plot_data <- sensitivity_all %>%
   dplyr::filter(scenario != "Baseline") %>%
@@ -89,118 +288,81 @@ plot_data <- sensitivity_all %>%
     baseline_values,
     by = "project"
   ) %>%
+  dplyr::left_join(
+    scenario_lookup,
+    by = "scenario"
+  ) %>%
   dplyr::mutate(
-    driver = dplyr::case_when(
-      scenario %in% c("Price +15%", "Price -15%") ~ "Peat price",
-      scenario %in% c("Yield +15%", "Yield -15%") ~ "Peat yield",
-      scenario %in% c("Freight +15%", "Freight -15%") ~ "Freight cost",
-      scenario %in% c("Operating cost +15%", "Operating cost -15%") ~ "Operating cost",
-      scenario %in% c("Discount rate 3%", "Discount rate 10%") ~ "Discount rate",
-      TRUE ~ scenario
-    ),
-    
-    scenario_level = dplyr::case_when(
-      scenario == "Price +15%" ~ "+15%",
-      scenario == "Price -15%" ~ "-15%",
-      scenario == "Yield +15%" ~ "+15%",
-      scenario == "Yield -15%" ~ "-15%",
-      scenario == "Freight +15%" ~ "+15%",
-      scenario == "Freight -15%" ~ "-15%",
-      scenario == "Operating cost +15%" ~ "+15%",
-      scenario == "Operating cost -15%" ~ "-15%",
-      scenario == "Discount rate 3%" ~ "3%",
-      scenario == "Discount rate 10%" ~ "10%",
-      TRUE ~ scenario
-    ),
-    
-    sensitivity_case = dplyr::case_when(
-      scenario %in% c("Price +15%", "Yield +15%") ~ "Higher-NPV case",
-      scenario %in% c("Price -15%", "Yield -15%") ~ "Lower-NPV case",
-      scenario %in% c("Freight -15%", "Operating cost -15%") ~ "Higher-NPV case",
-      scenario %in% c("Freight +15%", "Operating cost +15%") ~ "Lower-NPV case",
-      scenario == "Discount rate 3%" ~ "Higher-NPV case",
-      scenario == "Discount rate 10%" ~ "Lower-NPV case",
-      TRUE ~ "Lower-NPV case"
-    ),
-    
     mean_NPV_thousand_ha = mean_NPV_per_ha / 1000,
     
-    label = paste0(
-      scenario_level,
-      " | ",
-      scales::percent(p_NPV_positive, accuracy = 0.1)
+    # Bar labels show the probability that NPV is positive.
+    label = scales::percent(
+      p_NPV_positive,
+      accuracy = 0.1
     ),
     
-    label_x = dplyr::case_when(
-      sensitivity_case == "Higher-NPV case" ~ mean_NPV_thousand_ha + 1.5,
-      sensitivity_case == "Lower-NPV case" ~ mean_NPV_thousand_ha - 1.5,
-      mean_NPV_thousand_ha >= 0 ~ mean_NPV_thousand_ha + 1.5,
-      TRUE ~ mean_NPV_thousand_ha - 1.5
+    # Place labels outside the ends of the bars.
+    label_x = dplyr::if_else(
+      mean_NPV_thousand_ha >= 0,
+      mean_NPV_thousand_ha + 1.5,
+      mean_NPV_thousand_ha - 1.5
     ),
     
-    label_hjust = dplyr::case_when(
-      sensitivity_case == "Higher-NPV case" ~ 0,
-      sensitivity_case == "Lower-NPV case" ~ 1,
-      mean_NPV_thousand_ha >= 0 ~ 0,
-      TRUE ~ 1
-    )
-  )
-
-driver_order <- plot_data %>%
-  dplyr::group_by(driver) %>%
-  dplyr::summarise(
-    sensitivity_range = max(mean_NPV_thousand_ha, na.rm = TRUE) -
-      min(mean_NPV_thousand_ha, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  dplyr::arrange(sensitivity_range) %>%
-  dplyr::pull(driver)
-
-plot_data <- plot_data %>%
-  dplyr::mutate(
-    driver = factor(driver, levels = driver_order),
+    label_hjust = dplyr::if_else(
+      mean_NPV_thousand_ha >= 0,
+      0,
+      1
+    ),
+    
+    driver = factor(
+      driver,
+      levels = rev(driver_levels)
+    ),
+    
     sensitivity_case = factor(
       sensitivity_case,
-      levels = c("Higher-NPV case", "Lower-NPV case")
+      levels = case_levels
+    ),
+    
+    panel = factor(
+      panel,
+      levels = panel_levels
     )
   )
 
-baseline_caption <- sensitivity_all %>%
-  dplyr::filter(scenario == "Baseline") %>%
-  dplyr::mutate(
-    caption = paste0(
-      as.character(project),
-      ": baseline mean NPV = ",
-      scales::dollar(mean_NPV_per_ha, accuracy = 1),
-      "/ha; baseline P(NPV > 0) = ",
-      scales::percent(p_NPV_positive, accuracy = 0.1)
-    )
-  ) %>%
-  dplyr::pull(caption) %>%
-  paste(collapse = "\n")
+# ============================================================
+# 7. Set x-axis limits
+# ============================================================
 
-x_min <- min(
+all_x_values <- c(
   plot_data$mean_NPV_thousand_ha,
+  plot_data$label_x,
   baseline_values$baseline_mean_NPV_thousand_ha,
-  0,
-  na.rm = TRUE
+  0
 )
 
-x_max <- max(
-  plot_data$mean_NPV_thousand_ha,
-  baseline_values$baseline_mean_NPV_thousand_ha,
-  0,
-  na.rm = TRUE
-)
+x_min_raw <- min(all_x_values, na.rm = TRUE)
+x_max_raw <- max(all_x_values, na.rm = TRUE)
 
-x_padding <- (x_max - x_min) * 0.15
+x_range <- x_max_raw - x_min_raw
 
-x_min <- floor((x_min - x_padding) / 10) * 10
-x_max <- ceiling((x_max + x_padding) / 10) * 10
+if (x_range == 0) {
+  x_range <- 10
+}
+
+x_padding <- x_range * 0.10
+
+x_min <- floor(
+  (x_min_raw - x_padding) / 10
+) * 10
+
+x_max <- ceiling(
+  (x_max_raw + x_padding) / 10
+) * 10
 
 x_breaks <- seq(
-  from = x_min,
-  to = x_max,
+  x_min,
+  x_max,
   by = 10
 )
 
@@ -210,7 +372,7 @@ bar_position <- position_dodge2(
 )
 
 # ============================================================
-# 4. Plot sensitivity-check bar chart
+# 8. Plot
 # ============================================================
 
 p <- ggplot(
@@ -223,12 +385,14 @@ p <- ggplot(
 ) +
   geom_vline(
     xintercept = 0,
-    color = "grey70",
+    color = "grey60",
     linewidth = 0.55
   ) +
   geom_vline(
     data = baseline_values,
-    aes(xintercept = baseline_mean_NPV_thousand_ha),
+    aes(
+      xintercept = baseline_mean_NPV_thousand_ha
+    ),
     inherit.aes = FALSE,
     color = "grey20",
     linewidth = 0.75,
@@ -252,90 +416,60 @@ p <- ggplot(
     vjust = 0.5
   ) +
   facet_wrap(
-    ~ project,
+    ~ panel,
     ncol = 1
   ) +
   scale_fill_manual(
-    values = sensitivity_colors,
-    breaks = c("Higher-NPV case", "Lower-NPV case")
+    values = case_colors,
+    breaks = case_levels,
+    limits = case_levels,
+    drop = FALSE
   ) +
   scale_x_continuous(
     breaks = x_breaks,
-    labels = scales::label_number(accuracy = 1),
+    labels = scales::label_number(
+      accuracy = 1
+    ),
     limits = c(x_min, x_max),
-    expand = expansion(mult = c(0.03, 0.03))
+    expand = expansion(
+      mult = c(0.03, 0.03)
+    )
   ) +
   labs(
     x = "Mean NPV under sensitivity scenario (thousand CAD/ha)",
     y = NULL,
     fill = NULL,
     caption = paste0(
-      "Bar labels show scenario level | P(NPV > 0). Dashed vertical lines show baseline mean NPV.\n",
-      "Higher-NPV cases: +15% price/yield, -15% cost/freight, or 3% discount rate.\n",
-      "lower-NPV cases: -15% price/yield, +15% cost/freight, or 10% discount rate.\n",
-      baseline_caption
+      "Bar labels show P(NPV > 0). Dashed vertical lines show baseline mean NPV.\n",
+      "Lower parameter setting: -15% for peat price, operating cost, freight cost, ",
+      "and peat yield; 3% for the discount rate.\n",
+      "Higher parameter setting: +15% for peat price, operating cost, freight cost, ",
+      "and peat yield; 10% for the discount rate."
     )
   ) +
-  theme_classic(base_size = 12) +
-  theme(
-    legend.position = "top",
-    legend.justification = "center",
-    legend.direction = "horizontal",
-    legend.key.width = grid::unit(0.75, "cm"),
-    legend.key.height = grid::unit(0.45, "cm"),
-    legend.text = element_text(size = 10.5),
-    
-    strip.background = element_blank(),
-    strip.text = element_text(face = "bold", size = 12.5),
-    
-    axis.text = element_text(color = "black", size = 10.5),
-    axis.title.x = element_text(size = 12),
-    axis.line = element_line(color = "black", linewidth = 0.55),
-    axis.ticks = element_line(color = "black", linewidth = 0.45),
-    
-    panel.grid.major.x = element_line(color = "grey88", linewidth = 0.35),
-    panel.grid.minor = element_blank(),
-    
-    plot.caption = element_text(
-      hjust = 0,
-      size = 8.8,
-      color = "grey25",
-      lineheight = 1.1
-    ),
-    
-    plot.margin = margin(8, 40, 8, 8)
-  ) +
-  coord_cartesian(clip = "off")
+  common_plot_theme() +
+  coord_cartesian(
+    clip = "off"
+  )
 
 print(p)
 
 # ============================================================
-# 5. Save figure
+# 9. Save figure
 # ============================================================
 
 dir.create(
-  dirname(output_path),
+  dirname(output_png_path),
   showWarnings = FALSE,
   recursive = TRUE
 )
 
 ggsave(
-  filename = output_path,
+  filename = output_png_path,
   plot = p,
   width = 8.8,
-  height = 7.4,
+  height = 8.0,
   units = "in",
   dpi = 300,
-  bg = "white"
-)
-
-ggsave(
-  filename = output_tiff_path,
-  plot = p,
-  width = 8.8,
-  height = 7.4,
-  units = "in",
-  dpi = 300,
-  compression = "lzw",
   bg = "white"
 )

@@ -2,6 +2,7 @@
 # Peat extraction Monte Carlo simulation
 # Operating cost, yield, price, freight, NPV, emissions, and BEP
 # 10,000 simulations x 18 years
+# Carbon accounting: discounted gradual-decomposition emissions
 # ============================================================
 
 
@@ -48,7 +49,38 @@ sim_grid <- tidyr::crossing(
 
 
 # ============================================================
-# 2. Unit conversion assumptions
+# 2. Helper function for summary tables
+# ============================================================
+
+make_summary <- function(data, vars, dataset_name) {
+  data %>%
+    dplyr::summarise(
+      dplyr::across(
+        dplyr::all_of(vars),
+        list(
+          n    = ~ sum(is.finite(.x)),
+          mean = ~ mean(.x, na.rm = TRUE),
+          sd   = ~ stats::sd(.x, na.rm = TRUE),
+          min  = ~ min(.x, na.rm = TRUE),
+          p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
+          p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
+          p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
+          max  = ~ max(.x, na.rm = TRUE)
+        ),
+        .names = "{.col}_{.fn}"
+      )
+    ) %>%
+    tidyr::pivot_longer(
+      cols = dplyr::everything(),
+      names_to = c("variable", ".value"),
+      names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
+    ) %>%
+    dplyr::mutate(dataset = dataset_name, .before = 1)
+}
+
+
+# ============================================================
+# 3. Unit conversion assumptions
 # ============================================================
 
 ft3_to_m3 <- 0.0283168
@@ -71,7 +103,7 @@ m3_per_ton_plant_to_customer <- m3_per_ton_comp
 
 
 # ============================================================
-# 3. Operating cost simulation, $/t
+# 4. Operating cost simulation, $/t
 # ============================================================
 
 cost_min <- 104.25
@@ -88,19 +120,11 @@ cost_sim <- sim_grid %>%
     )
   )
 
-cost_summary <- cost_sim %>%
-  dplyr::summarise(
-    dataset  = "simulated_costs",
-    variable = "cost_t",
-    n        = sum(is.finite(cost_t)),
-    mean     = mean(cost_t, na.rm = TRUE),
-    sd       = stats::sd(cost_t, na.rm = TRUE),
-    min      = min(cost_t, na.rm = TRUE),
-    p10      = as.numeric(stats::quantile(cost_t, 0.10, na.rm = TRUE)),
-    p50      = as.numeric(stats::quantile(cost_t, 0.50, na.rm = TRUE)),
-    p90      = as.numeric(stats::quantile(cost_t, 0.90, na.rm = TRUE)),
-    max      = max(cost_t, na.rm = TRUE)
-  )
+cost_summary <- make_summary(
+  data = cost_sim,
+  vars = c("cost_t"),
+  dataset_name = "simulated_costs"
+)
 
 utils::write.csv(
   cost_sim,
@@ -110,7 +134,7 @@ utils::write.csv(
 
 
 # ============================================================
-# 4. Peat yield simulation
+# 5. Peat yield simulation
 # ============================================================
 
 depth_min <- 0.05
@@ -131,29 +155,11 @@ yield_sim <- sim_grid %>%
     yield_t_ha  = yield_m3_ha / m3_per_ton_loose
   )
 
-yield_summary <- yield_sim %>%
-  dplyr::summarise(
-    dplyr::across(
-      c(depth_m, yield_m3_ha, yield_t_ha),
-      list(
-        n    = ~ sum(is.finite(.x)),
-        mean = ~ mean(.x, na.rm = TRUE),
-        sd   = ~ stats::sd(.x, na.rm = TRUE),
-        min  = ~ min(.x, na.rm = TRUE),
-        p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
-        p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
-        p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
-        max  = ~ max(.x, na.rm = TRUE)
-      ),
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = c("variable", ".value"),
-    names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
-  ) %>%
-  dplyr::mutate(dataset = "simulated_peat_yield", .before = 1)
+yield_summary <- make_summary(
+  data = yield_sim,
+  vars = c("depth_m", "yield_m3_ha", "yield_t_ha"),
+  dataset_name = "simulated_peat_yield"
+)
 
 utils::write.csv(
   yield_sim,
@@ -163,7 +169,7 @@ utils::write.csv(
 
 
 # ============================================================
-# 5. Peat price fitting and simulation, $/t
+# 6. Peat price fitting and simulation, $/t
 # ============================================================
 
 peat_data <- utils::read.csv(input_price_path) %>%
@@ -257,19 +263,11 @@ price_sim <- sim_grid %>%
   ) %>%
   dplyr::select(iteration, year, price_t)
 
-price_summary <- price_sim %>%
-  dplyr::summarise(
-    dataset  = "simulated_peat_price",
-    variable = "price_t",
-    n        = sum(is.finite(price_t)),
-    mean     = mean(price_t, na.rm = TRUE),
-    sd       = stats::sd(price_t, na.rm = TRUE),
-    min      = min(price_t, na.rm = TRUE),
-    p10      = as.numeric(stats::quantile(price_t, 0.10, na.rm = TRUE)),
-    p50      = as.numeric(stats::quantile(price_t, 0.50, na.rm = TRUE)),
-    p90      = as.numeric(stats::quantile(price_t, 0.90, na.rm = TRUE)),
-    max      = max(price_t, na.rm = TRUE)
-  )
+price_summary <- make_summary(
+  data = price_sim,
+  vars = c("price_t"),
+  dataset_name = "simulated_peat_price"
+)
 
 price_year_stats <- price_sim %>%
   dplyr::group_by(year) %>%
@@ -288,9 +286,15 @@ utils::write.csv(
   row.names = FALSE
 )
 
+utils::write.csv(
+  price_year_stats,
+  file.path(output_data_dir, "simulated_peat_price_year_stats.csv"),
+  row.names = FALSE
+)
+
 
 # ============================================================
-# 6. Build base simulation panel
+# 7. Build base simulation panel
 # ============================================================
 
 base_panel <- price_sim %>%
@@ -310,36 +314,18 @@ base_panel <- price_sim %>%
   ) %>%
   dplyr::arrange(iteration, year)
 
-base_panel_summary <- base_panel %>%
-  dplyr::summarise(
-    dplyr::across(
-      c(price_t, costs_t, tons_ha),
-      list(
-        n    = ~ sum(is.finite(.x)),
-        mean = ~ mean(.x, na.rm = TRUE),
-        sd   = ~ stats::sd(.x, na.rm = TRUE),
-        min  = ~ min(.x, na.rm = TRUE),
-        p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
-        p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
-        p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
-        max  = ~ max(.x, na.rm = TRUE)
-      ),
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = c("variable", ".value"),
-    names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
-  ) %>%
-  dplyr::mutate(dataset = "base_panel", .before = 1)
+base_panel_summary <- make_summary(
+  data = base_panel,
+  vars = c("price_t", "costs_t", "tons_ha"),
+  dataset_name = "base_panel"
+)
 
 iter_ids <- sort(unique(base_panel$iteration))
 n_iter_actual <- length(iter_ids)
 
 
 # ============================================================
-# 7. Initial costs, royalty, restoration, and salvage
+# 8. Initial costs, royalty, restoration, and salvage
 # ============================================================
 
 salvage_factor <- (1 - depr_rate)^final_year
@@ -362,29 +348,16 @@ initial_df <- tibble::tibble(
     salvage_equipment  = initial_cost_equipment * salvage_factor
   )
 
-initial_cost_summary <- initial_df %>%
-  dplyr::summarise(
-    dplyr::across(
-      c(initial_cost_equipment, env_app_cost, total_initial_cost, salvage_equipment),
-      list(
-        n    = ~ sum(is.finite(.x)),
-        mean = ~ mean(.x, na.rm = TRUE),
-        sd   = ~ stats::sd(.x, na.rm = TRUE),
-        min  = ~ min(.x, na.rm = TRUE),
-        p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
-        p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
-        p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
-        max  = ~ max(.x, na.rm = TRUE)
-      ),
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = c("variable", ".value"),
-    names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
-  ) %>%
-  dplyr::mutate(dataset = "initial_costs", .before = 1)
+initial_cost_summary <- make_summary(
+  data = initial_df,
+  vars = c(
+    "initial_cost_equipment",
+    "env_app_cost",
+    "total_initial_cost",
+    "salvage_equipment"
+  ),
+  dataset_name = "initial_costs"
+)
 
 royalty_per_cy <- 0.11
 royalty_per_m3 <- royalty_per_cy * m3_to_cy
@@ -394,7 +367,7 @@ restoration_cost_per_ha <- 3485
 
 
 # ============================================================
-# 8. Freight simulation, $/t
+# 9. Freight simulation, $/t
 # ============================================================
 
 # Bog to plant
@@ -503,29 +476,11 @@ freight_draws <- sim_grid %>%
     freight_total_t
   )
 
-freight_summary <- freight_draws %>%
-  dplyr::summarise(
-    dplyr::across(
-      c(freight1_t, freight2_t, freight_total_t),
-      list(
-        n    = ~ sum(is.finite(.x)),
-        mean = ~ mean(.x, na.rm = TRUE),
-        sd   = ~ stats::sd(.x, na.rm = TRUE),
-        min  = ~ min(.x, na.rm = TRUE),
-        p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
-        p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
-        p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
-        max  = ~ max(.x, na.rm = TRUE)
-      ),
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = c("variable", ".value"),
-    names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
-  ) %>%
-  dplyr::mutate(dataset = "simulated_freight_costs", .before = 1)
+freight_summary <- make_summary(
+  data = freight_draws,
+  vars = c("freight1_t", "freight2_t", "freight_total_t"),
+  dataset_name = "simulated_freight_costs"
+)
 
 utils::write.csv(
   freight_draws,
@@ -535,7 +490,7 @@ utils::write.csv(
 
 
 # ============================================================
-# 9. Carbon emissions simulation
+# 10. Carbon emissions settings
 # ============================================================
 
 # Off-site peat decay rate after extraction/use
@@ -548,128 +503,114 @@ C_frac_dry <- 0.46
 moisture_frac <- 0.50
 dry_frac      <- 1 - moisture_frac
 
-# On-site emission factor, tC/ha/year.
-# It is converted to tCO2e below using 44/12.
-EF_onsite_tC_ha_yr <- 1.4
+# On-site emission factors, t CO2-C/ha/year.
+# Both are converted to t CO2e below using 44/12.
+EF_onsite_low_tC_ha_yr  <- 1.4
+EF_onsite_high_tC_ha_yr <- 3.1
 
+# Baseline value used only for stand-alone diagnostics.
+EF_onsite_tC_ha_yr <- EF_onsite_low_tC_ha_yr
+
+
+# ============================================================
+# 11. Emissions functions
+# ============================================================
+
+calc_annual_emissions <- function(data, EF_onsite_tC_ha_yr_scn) {
+  data %>%
+    dplyr::group_by(iteration) %>%
+    dplyr::arrange(year, .by_group = TRUE) %>%
+    dplyr::mutate(
+      area_ha = project_area_ha,
+      m_tC = total_tons * dry_frac * C_frac_dry,
+      offsite_tC = as.numeric(
+        stats::filter(
+          x = m_tC,
+          filter = 1 - k_decay,
+          method = "recursive"
+        )
+      ) * k_decay,
+      offsite_tCO2e = offsite_tC * (44 / 12),
+      onsite_tCO2e  = EF_onsite_tC_ha_yr_scn * project_area_ha * (44 / 12),
+      total_tCO2e = onsite_tCO2e + offsite_tCO2e
+    ) %>%
+    dplyr::ungroup()
+}
+
+calc_emissions_for_BEP <- function(emissions_data, discount_rate_scn) {
+  emissions_data %>%
+    dplyr::group_by(iteration) %>%
+    dplyr::arrange(year, .by_group = TRUE) %>%
+    dplyr::summarise(
+      T       = max(year),
+      area_ha = dplyr::first(area_ha),
+      PV_onsite_1T = sum(
+        onsite_tCO2e / ((1 + discount_rate_scn)^year),
+        na.rm = TRUE
+      ),
+      PV_offsite_1T = sum(
+        offsite_tCO2e / ((1 + discount_rate_scn)^year),
+        na.rm = TRUE
+      ),
+      offsite_T = dplyr::last(offsite_tCO2e),
+      PV_offsite_tail = (offsite_T / ((1 + discount_rate_scn)^T)) *
+        ((1 - k_decay) / (discount_rate_scn + k_decay)),
+      emissions_for_BEP_tCO2e_total =
+        PV_onsite_1T + PV_offsite_1T + PV_offsite_tail,
+      emissions_for_BEP_tCO2e_per_ha =
+        emissions_for_BEP_tCO2e_total / area_ha,
+      .groups = "drop"
+    )
+}
+
+# Stand-alone baseline emissions diagnostics use the low on-site EF.
 emissions_df <- base_panel %>%
-  dplyr::group_by(iteration) %>%
-  dplyr::arrange(year, .by_group = TRUE) %>%
-  dplyr::mutate(
-    area_ha = project_area_ha,
-    total_tons = tons_ha * project_area_ha,
-    
-    m_tC = total_tons * dry_frac * C_frac_dry,
-    
-    offsite_tC = as.numeric(
-      stats::filter(
-        x = m_tC,
-        filter = 1 - k_decay,
-        method = "recursive"
-      )
-    ) * k_decay,
-    
-    offsite_tCO2e = offsite_tC * (44 / 12),
-    onsite_tCO2e  = EF_onsite_tC_ha_yr * project_area_ha * (44 / 12),
-    
-    total_tCO2e = onsite_tCO2e + offsite_tCO2e
-  ) %>%
-  dplyr::ungroup()
+  dplyr::mutate(total_tons = tons_ha * project_area_ha) %>%
+  calc_annual_emissions(EF_onsite_tC_ha_yr_scn = EF_onsite_low_tC_ha_yr)
 
-emissions_summary <- emissions_df %>%
-  dplyr::summarise(
-    dplyr::across(
-      c(total_tons, m_tC, offsite_tC, offsite_tCO2e, onsite_tCO2e, total_tCO2e),
-      list(
-        n    = ~ sum(is.finite(.x)),
-        mean = ~ mean(.x, na.rm = TRUE),
-        sd   = ~ stats::sd(.x, na.rm = TRUE),
-        min  = ~ min(.x, na.rm = TRUE),
-        p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
-        p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
-        p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
-        max  = ~ max(.x, na.rm = TRUE)
-      ),
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = c("variable", ".value"),
-    names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
-  ) %>%
-  dplyr::mutate(dataset = "simulated_emissions", .before = 1)
+emissions_summary <- make_summary(
+  data = emissions_df,
+  vars = c(
+    "total_tons",
+    "m_tC",
+    "offsite_tC",
+    "offsite_tCO2e",
+    "onsite_tCO2e",
+    "total_tCO2e"
+  ),
+  dataset_name = "simulated_emissions_baseline_low_EF"
+)
 
 
 # ============================================================
-# 10. Present value of emissions
+# 12. Present value of emissions for BEP
 # ============================================================
 
-pv_emis <- emissions_df %>%
-  dplyr::group_by(iteration) %>%
-  dplyr::arrange(year, .by_group = TRUE) %>%
-  dplyr::summarise(
-    T       = max(year),
-    area_ha = dplyr::first(area_ha),
-    
-    PV_onsite_1T = sum(
-      onsite_tCO2e / ((1 + discount_rate)^year),
-      na.rm = TRUE
-    ),
-    
-    PV_offsite_1T = sum(
-      offsite_tCO2e / ((1 + discount_rate)^year),
-      na.rm = TRUE
-    ),
-    
-    offsite_T = dplyr::last(offsite_tCO2e),
-    
-    PV_offsite_tail = (offsite_T / ((1 + discount_rate)^T)) *
-      ((1 - k_decay) / (discount_rate + k_decay)),
-    
-    PV_tCO2e_total  = PV_onsite_1T + PV_offsite_1T + PV_offsite_tail,
-    PV_tCO2e_per_ha = PV_tCO2e_total / area_ha,
-    
-    .groups = "drop"
-  )
+pv_emis <- calc_emissions_for_BEP(
+  emissions_data = emissions_df,
+  discount_rate_scn = discount_rate
+)
 
-pv_emis_summary <- pv_emis %>%
-  dplyr::summarise(
-    dplyr::across(
-      c(PV_onsite_1T, PV_offsite_1T, PV_offsite_tail, PV_tCO2e_total, PV_tCO2e_per_ha),
-      list(
-        n    = ~ sum(is.finite(.x)),
-        mean = ~ mean(.x, na.rm = TRUE),
-        sd   = ~ stats::sd(.x, na.rm = TRUE),
-        min  = ~ min(.x, na.rm = TRUE),
-        p10  = ~ as.numeric(stats::quantile(.x, 0.10, na.rm = TRUE)),
-        p50  = ~ as.numeric(stats::quantile(.x, 0.50, na.rm = TRUE)),
-        p90  = ~ as.numeric(stats::quantile(.x, 0.90, na.rm = TRUE)),
-        max  = ~ max(.x, na.rm = TRUE)
-      ),
-      .names = "{.col}_{.fn}"
-    )
-  ) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = c("variable", ".value"),
-    names_pattern = "(.+)_(n|mean|sd|min|p10|p50|p90|max)"
-  ) %>%
-  dplyr::mutate(dataset = "pv_emissions", .before = 1)
+emissions_for_BEP_summary <- make_summary(
+  data = pv_emis,
+  vars = c('PV_onsite_1T', 'PV_offsite_1T', 'PV_offsite_tail', 'emissions_for_BEP_tCO2e_total', 'emissions_for_BEP_tCO2e_per_ha'),
+  dataset_name = "pv_emissions_for_BEP"
+)
 
-cat("\n--- PV emissions, tCO2e/ha ---\n")
-print(summary(pv_emis$PV_tCO2e_per_ha))
+cat("\n--- PV emissions for BEP, tCO2e/ha ---\n")
+print(summary(pv_emis$emissions_for_BEP_tCO2e_per_ha))
 
 
 # ============================================================
-# 11. Scenario calculation function
+# 13. Scenario calculation function
 # ============================================================
 
 run_project_scenario <- function(price_mult = 1,
                                  yield_mult = 1,
                                  freight_mult = 1,
                                  cost_mult = 1,
-                                 discount_rate_scn = discount_rate) {
+                                 discount_rate_scn = discount_rate,
+                                 EF_onsite_tC_ha_yr_scn = EF_onsite_low_tC_ha_yr) {
   
   annual_cashflow <- base_panel %>%
     dplyr::inner_join(
@@ -728,59 +669,16 @@ run_project_scenario <- function(price_mult = 1,
     )
   
   scenario_emissions <- annual_cashflow %>%
-    dplyr::group_by(iteration) %>%
-    dplyr::arrange(year, .by_group = TRUE) %>%
-    dplyr::mutate(
-      area_ha = project_area_ha,
-      
-      m_tC = total_tons * dry_frac * C_frac_dry,
-      
-      offsite_tC = as.numeric(
-        stats::filter(
-          x = m_tC,
-          filter = 1 - k_decay,
-          method = "recursive"
-        )
-      ) * k_decay,
-      
-      offsite_tCO2e = offsite_tC * (44 / 12),
-      onsite_tCO2e  = EF_onsite_tC_ha_yr * project_area_ha * (44 / 12),
-      
-      total_tCO2e = onsite_tCO2e + offsite_tCO2e
-    ) %>%
-    dplyr::ungroup()
+    calc_annual_emissions(EF_onsite_tC_ha_yr_scn = EF_onsite_tC_ha_yr_scn)
   
-  pv_emis_scn <- scenario_emissions %>%
-    dplyr::group_by(iteration) %>%
-    dplyr::arrange(year, .by_group = TRUE) %>%
-    dplyr::summarise(
-      T       = max(year),
-      area_ha = dplyr::first(area_ha),
-      
-      PV_onsite_1T = sum(
-        onsite_tCO2e / ((1 + discount_rate_scn)^year),
-        na.rm = TRUE
-      ),
-      
-      PV_offsite_1T = sum(
-        offsite_tCO2e / ((1 + discount_rate_scn)^year),
-        na.rm = TRUE
-      ),
-      
-      offsite_T = dplyr::last(offsite_tCO2e),
-      
-      PV_offsite_tail = (offsite_T / ((1 + discount_rate_scn)^T)) *
-        ((1 - k_decay) / (discount_rate_scn + k_decay)),
-      
-      PV_tCO2e_total  = PV_onsite_1T + PV_offsite_1T + PV_offsite_tail,
-      PV_tCO2e_per_ha = PV_tCO2e_total / area_ha,
-      
-      .groups = "drop"
-    )
+  emissions_for_BEP <- calc_emissions_for_BEP(
+    emissions_data = scenario_emissions,
+    discount_rate_scn = discount_rate_scn
+  )
   
   bep_results <- npv_results %>%
     dplyr::left_join(
-      pv_emis_scn,
+      emissions_for_BEP,
       by = "iteration"
     ) %>%
     dplyr::mutate(
@@ -789,11 +687,14 @@ run_project_scenario <- function(price_mult = 1,
         NPV_per_ha,
         NA_real_
       ),
-      BEP = NPV_used_for_BEP_per_ha / PV_tCO2e_per_ha
+      BEP = NPV_used_for_BEP_per_ha / emissions_for_BEP_tCO2e_per_ha
     )
   
   summary_row <- tibble::tibble(
+    emissions_accounting = "Discounted gradual decomposition",
+    project_horizon_years = n_years,
     discount_rate_scn = discount_rate_scn,
+    EF_onsite_tC_ha_yr = EF_onsite_tC_ha_yr_scn,
     
     mean_NPV_per_ha = mean(npv_results$NPV_per_ha, na.rm = TRUE),
     sd_NPV_per_ha   = stats::sd(npv_results$NPV_per_ha, na.rm = TRUE),
@@ -803,6 +704,21 @@ run_project_scenario <- function(price_mult = 1,
     p90_NPV_per_ha  = as.numeric(stats::quantile(npv_results$NPV_per_ha, 0.90, na.rm = TRUE)),
     max_NPV_per_ha  = max(npv_results$NPV_per_ha, na.rm = TRUE),
     p_NPV_positive  = mean(npv_results$NPV_per_ha > 0, na.rm = TRUE),
+    
+    mean_emissions_for_BEP_tCO2e_per_ha =
+      mean(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, na.rm = TRUE),
+    sd_emissions_for_BEP_tCO2e_per_ha =
+      stats::sd(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, na.rm = TRUE),
+    min_emissions_for_BEP_tCO2e_per_ha =
+      min(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, na.rm = TRUE),
+    p10_emissions_for_BEP_tCO2e_per_ha =
+      as.numeric(stats::quantile(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, 0.10, na.rm = TRUE)),
+    p50_emissions_for_BEP_tCO2e_per_ha =
+      as.numeric(stats::quantile(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, 0.50, na.rm = TRUE)),
+    p90_emissions_for_BEP_tCO2e_per_ha =
+      as.numeric(stats::quantile(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, 0.90, na.rm = TRUE)),
+    max_emissions_for_BEP_tCO2e_per_ha =
+      max(emissions_for_BEP$emissions_for_BEP_tCO2e_per_ha, na.rm = TRUE),
     
     mean_NPV_used_for_BEP_per_ha = mean(bep_results$NPV_used_for_BEP_per_ha, na.rm = TRUE),
     sd_NPV_used_for_BEP_per_ha   = stats::sd(bep_results$NPV_used_for_BEP_per_ha, na.rm = TRUE),
@@ -827,7 +743,7 @@ run_project_scenario <- function(price_mult = 1,
   list(
     annual_cashflow   = annual_cashflow,
     scenario_emissions = scenario_emissions,
-    PV_emissions      = pv_emis_scn,
+    emissions_for_BEP = emissions_for_BEP,
     NPV_results       = npv_results,
     BEP_results       = bep_results,
     summary_row       = summary_row
@@ -836,9 +752,10 @@ run_project_scenario <- function(price_mult = 1,
 
 
 # ============================================================
-# 12. Scenario table
+# 14. Scenario tables
 # ============================================================
 
+# Economic scenarios. These change only economic or production assumptions.
 scenario_tbl <- tibble::tibble(
   scenario = c(
     "Baseline",
@@ -920,45 +837,72 @@ scenario_tbl <- tibble::tibble(
   )
 )
 
+# Carbon-accounting cases for on-site emissions.
+# These are not economic scenarios. Each economic scenario is run once
+# with 1.4 t CO2-C/ha/year and once with 3.1 t CO2-C/ha/year.
+onsite_ef_tbl <- tibble::tibble(
+  onsite_EF_case = c(
+    "On-site EF 1.4 t CO2-C/ha/yr",
+    "On-site EF 3.1 t CO2-C/ha/yr"
+  ),
+  EF_onsite_tC_ha_yr_scn = c(
+    EF_onsite_low_tC_ha_yr,
+    EF_onsite_high_tC_ha_yr
+  )
+)
+
+scenario_grid <- tidyr::crossing(
+  onsite_ef_tbl,
+  scenario_tbl
+)
+
 
 # ============================================================
-# 13. Run all scenarios
+# 15. Run all economic scenarios under both on-site emission factors
 # ============================================================
 
-scenario_outputs <- vector("list", nrow(scenario_tbl))
-summary_list     <- vector("list", nrow(scenario_tbl))
+scenario_outputs <- vector("list", nrow(scenario_grid))
+summary_list     <- vector("list", nrow(scenario_grid))
 
-for (i in seq_len(nrow(scenario_tbl))) {
+for (i in seq_len(nrow(scenario_grid))) {
   
-  scn <- scenario_tbl[i, ]
+  scn <- scenario_grid[i, ]
   
   scenario_result <- run_project_scenario(
-    price_mult        = scn$price_mult,
-    yield_mult        = scn$yield_mult,
-    freight_mult      = scn$freight_mult,
-    cost_mult         = scn$cost_mult,
-    discount_rate_scn = scn$discount_rate_scn
+    price_mult             = scn$price_mult,
+    yield_mult             = scn$yield_mult,
+    freight_mult           = scn$freight_mult,
+    cost_mult              = scn$cost_mult,
+    discount_rate_scn      = scn$discount_rate_scn,
+    EF_onsite_tC_ha_yr_scn = scn$EF_onsite_tC_ha_yr_scn
   )
   
-  scenario_result$NPV_results <- scenario_result$NPV_results %>%
-    dplyr::mutate(scenario = scn$scenario, .before = 1)
+  add_scenario_cols <- function(data) {
+    data %>%
+      dplyr::mutate(
+        emissions_accounting = "Discounted gradual decomposition",
+        project_horizon_years = n_years,
+        onsite_EF_case = scn$onsite_EF_case,
+        EF_onsite_tC_ha_yr = scn$EF_onsite_tC_ha_yr_scn,
+        scenario = scn$scenario,
+        .before = 1
+      )
+  }
   
-  scenario_result$BEP_results <- scenario_result$BEP_results %>%
-    dplyr::mutate(scenario = scn$scenario, .before = 1)
-  
-  scenario_result$annual_cashflow <- scenario_result$annual_cashflow %>%
-    dplyr::mutate(scenario = scn$scenario, .before = 1)
-  
-  scenario_result$scenario_emissions <- scenario_result$scenario_emissions %>%
-    dplyr::mutate(scenario = scn$scenario, .before = 1)
-  
-  scenario_result$PV_emissions <- scenario_result$PV_emissions %>%
-    dplyr::mutate(scenario = scn$scenario, .before = 1)
+  scenario_result$NPV_results <- add_scenario_cols(scenario_result$NPV_results)
+  scenario_result$BEP_results <- add_scenario_cols(scenario_result$BEP_results)
+  scenario_result$annual_cashflow <- add_scenario_cols(scenario_result$annual_cashflow)
+  scenario_result$scenario_emissions <- add_scenario_cols(scenario_result$scenario_emissions)
+  scenario_result$emissions_for_BEP <- add_scenario_cols(scenario_result$emissions_for_BEP)
   
   scenario_outputs[[i]] <- scenario_result
   
   summary_list[[i]] <- scenario_result$summary_row %>%
-    dplyr::mutate(scenario = scn$scenario, .before = 1)
+    dplyr::mutate(
+      onsite_EF_case = scn$onsite_EF_case,
+      scenario = scn$scenario,
+      .before = 1
+    )
 }
 
 NPV_all <- dplyr::bind_rows(
@@ -977,56 +921,60 @@ emissions_all <- dplyr::bind_rows(
   lapply(scenario_outputs, function(x) x$scenario_emissions)
 )
 
-pv_emis_all <- dplyr::bind_rows(
-  lapply(scenario_outputs, function(x) x$PV_emissions)
+emissions_for_BEP_all <- dplyr::bind_rows(
+  lapply(scenario_outputs, function(x) x$emissions_for_BEP)
 )
 
 sensitivity_summary <- dplyr::bind_rows(summary_list)
 
 
 # ============================================================
-# 14. Sensitivity summary relative to baseline
+# 16. Sensitivity summary relative to baseline within each on-site EF case
 # ============================================================
 
-baseline_mean_npv <- sensitivity_summary$mean_NPV_per_ha[
-  sensitivity_summary$scenario == "Baseline"
-]
-
-baseline_max_npv <- sensitivity_summary$max_NPV_per_ha[
-  sensitivity_summary$scenario == "Baseline"
-]
-
-baseline_mean_npv_used_for_bep <- sensitivity_summary$mean_NPV_used_for_BEP_per_ha[
-  sensitivity_summary$scenario == "Baseline"
-]
-
-baseline_mean_bep <- sensitivity_summary$mean_BEP[
-  sensitivity_summary$scenario == "Baseline"
-]
-
-sensitivity_summary <- sensitivity_summary %>%
-  dplyr::mutate(
-    delta_mean_NPV_per_ha = mean_NPV_per_ha - baseline_mean_npv,
-    pct_change_mean_NPV   = 100 * (mean_NPV_per_ha / baseline_mean_npv - 1),
-    
-    delta_max_NPV_per_ha = max_NPV_per_ha - baseline_max_npv,
-    pct_change_max_NPV   = 100 * (max_NPV_per_ha / baseline_max_npv - 1),
-    
-    delta_mean_NPV_used_for_BEP_per_ha =
-      mean_NPV_used_for_BEP_per_ha - baseline_mean_npv_used_for_bep,
-    pct_change_mean_NPV_used_for_BEP =
-      100 * (mean_NPV_used_for_BEP_per_ha / baseline_mean_npv_used_for_bep - 1),
-    
-    delta_mean_BEP      = mean_BEP - baseline_mean_bep,
-    pct_change_mean_BEP = 100 * (mean_BEP / baseline_mean_bep - 1)
+baseline_summary <- sensitivity_summary %>%
+  dplyr::filter(scenario == "Baseline") %>%
+  dplyr::select(
+    onsite_EF_case,
+    baseline_mean_NPV_per_ha = mean_NPV_per_ha,
+    baseline_max_NPV_per_ha = max_NPV_per_ha,
+    baseline_mean_NPV_used_for_BEP_per_ha = mean_NPV_used_for_BEP_per_ha,
+    baseline_mean_emissions_for_BEP_tCO2e_per_ha = mean_emissions_for_BEP_tCO2e_per_ha,
+    baseline_mean_BEP = mean_BEP
   )
 
-cat("\n--- Sensitivity summary ---\n")
+sensitivity_summary <- sensitivity_summary %>%
+  dplyr::left_join(
+    baseline_summary,
+    by = "onsite_EF_case"
+  ) %>%
+  dplyr::mutate(
+    delta_mean_NPV_per_ha = mean_NPV_per_ha - baseline_mean_NPV_per_ha,
+    pct_change_mean_NPV   = 100 * (mean_NPV_per_ha / baseline_mean_NPV_per_ha - 1),
+    
+    delta_max_NPV_per_ha = max_NPV_per_ha - baseline_max_NPV_per_ha,
+    pct_change_max_NPV   = 100 * (max_NPV_per_ha / baseline_max_NPV_per_ha - 1),
+    
+    delta_mean_NPV_used_for_BEP_per_ha =
+      mean_NPV_used_for_BEP_per_ha - baseline_mean_NPV_used_for_BEP_per_ha,
+    pct_change_mean_NPV_used_for_BEP =
+      100 * (mean_NPV_used_for_BEP_per_ha / baseline_mean_NPV_used_for_BEP_per_ha - 1),
+    
+    delta_mean_emissions_for_BEP_tCO2e_per_ha =
+      mean_emissions_for_BEP_tCO2e_per_ha - baseline_mean_emissions_for_BEP_tCO2e_per_ha,
+    pct_change_mean_emissions_for_BEP =
+      100 * (mean_emissions_for_BEP_tCO2e_per_ha / baseline_mean_emissions_for_BEP_tCO2e_per_ha - 1),
+    
+    delta_mean_BEP      = mean_BEP - baseline_mean_BEP,
+    pct_change_mean_BEP = 100 * (mean_BEP / baseline_mean_BEP - 1)
+  )
+
+cat("\n--- Sensitivity summary, by on-site EF case ---\n")
 print(sensitivity_summary)
 
 
 # ============================================================
-# 15. Combined summary for simulated datasets
+# 17. Combined summary for simulated datasets
 # ============================================================
 
 simulation_summary <- dplyr::bind_rows(
@@ -1037,7 +985,7 @@ simulation_summary <- dplyr::bind_rows(
   initial_cost_summary,
   freight_summary,
   emissions_summary,
-  pv_emis_summary
+  emissions_for_BEP_summary
 ) %>%
   dplyr::mutate(
     dplyr::across(
@@ -1051,7 +999,7 @@ print(simulation_summary)
 
 
 # ============================================================
-# 16. Save main output files
+# 18. Save main output files
 # ============================================================
 
 utils::write.csv(
@@ -1079,8 +1027,8 @@ utils::write.csv(
 )
 
 utils::write.csv(
-  pv_emis_all,
-  file.path(output_data_dir, "pv_emissions_all_scenarios.csv"),
+  emissions_for_BEP_all,
+  file.path(output_data_dir, "emissions_for_BEP_all_scenarios.csv"),
   row.names = FALSE
 )
 
@@ -1098,48 +1046,63 @@ utils::write.csv(
 
 utils::write.csv(
   emissions_df,
-  file.path(output_data_dir, "annual_emissions_onsite_offsite.csv"),
+  file.path(output_data_dir, "annual_emissions_onsite_offsite_baseline_low_EF.csv"),
   row.names = FALSE
 )
 
 utils::write.csv(
   pv_emis,
-  file.path(output_data_dir, "pv_emissions_by_iteration.csv"),
+  file.path(output_data_dir, "emissions_for_BEP_by_iteration_baseline_low_EF.csv"),
   row.names = FALSE
 )
 
 
 # ============================================================
-# 17. Baseline results
+# 19. Baseline results under both on-site emission factors
 # ============================================================
 
-baseline_index <- which(scenario_tbl$scenario == "Baseline")
-baseline_out   <- scenario_outputs[[baseline_index]]
+baseline_results_by_EF <- sensitivity_summary %>%
+  dplyr::filter(scenario == "Baseline") %>%
+  dplyr::select(
+    emissions_accounting,
+    project_horizon_years,
+    onsite_EF_case,
+    EF_onsite_tC_ha_yr,
+    mean_NPV_per_ha,
+    sd_NPV_per_ha,
+    min_NPV_per_ha,
+    p50_NPV_per_ha,
+    max_NPV_per_ha,
+    p_NPV_positive,
+    mean_emissions_for_BEP_tCO2e_per_ha,
+    sd_emissions_for_BEP_tCO2e_per_ha,
+    p50_emissions_for_BEP_tCO2e_per_ha,
+    mean_BEP,
+    sd_BEP,
+    p50_BEP,
+    n_BEP,
+    n_excluded_BEP
+  )
 
-cat("\n--- Baseline NPV per ha ---\n")
-print(summary(baseline_out$NPV_results$NPV_per_ha))
+cat("\n--- Baseline summary under both on-site EF cases ---\n")
+print(baseline_results_by_EF)
 
-cat("Mean:", mean(baseline_out$NPV_results$NPV_per_ha, na.rm = TRUE), "\n")
-cat("SD:", stats::sd(baseline_out$NPV_results$NPV_per_ha, na.rm = TRUE), "\n")
-cat("Min:", min(baseline_out$NPV_results$NPV_per_ha, na.rm = TRUE), "\n")
-cat("Max:", max(baseline_out$NPV_results$NPV_per_ha, na.rm = TRUE), "\n")
-cat("P(NPV > 0):", mean(baseline_out$NPV_results$NPV_per_ha > 0, na.rm = TRUE), "\n")
-
-cat("\n--- Baseline BEP, positive NPV only ---\n")
-print(summary(baseline_out$BEP_results$BEP))
-
-cat("Mean BEP:", mean(baseline_out$BEP_results$BEP, na.rm = TRUE), "\n")
-cat("SD BEP:", stats::sd(baseline_out$BEP_results$BEP, na.rm = TRUE), "\n")
-cat("Number of BEP observations:", sum(!is.na(baseline_out$BEP_results$BEP)), "\n")
-cat("Excluded negative-NPV observations:", sum(is.na(baseline_out$BEP_results$BEP)), "\n")
+utils::write.csv(
+  baseline_results_by_EF,
+  file.path(output_data_dir, "baseline_results_by_onsite_EF.csv"),
+  row.names = FALSE
+)
 
 
 # ============================================================
-# 18. Emissions diagnostics
+# 20. Emissions diagnostics under both on-site emission factors
 # ============================================================
 
-emissions_by_year <- emissions_df %>%
-  dplyr::group_by(year) %>%
+baseline_emissions <- emissions_all %>%
+  dplyr::filter(scenario == "Baseline")
+
+emissions_by_year <- baseline_emissions %>%
+  dplyr::group_by(onsite_EF_case, EF_onsite_tC_ha_yr, year) %>%
   dplyr::summarise(
     mean_onsite_tCO2e  = mean(onsite_tCO2e, na.rm = TRUE),
     mean_offsite_tCO2e = mean(offsite_tCO2e, na.rm = TRUE),
@@ -1147,17 +1110,17 @@ emissions_by_year <- emissions_df %>%
     .groups = "drop"
   )
 
-cat("\n--- Annual emissions components ---\n")
+cat("\n--- Annual emissions components for baseline, by on-site EF case ---\n")
 print(emissions_by_year)
 
 utils::write.csv(
   emissions_by_year,
-  file.path(output_data_dir, "annual_emissions_summary_by_year.csv"),
+  file.path(output_data_dir, "annual_emissions_summary_by_year_by_onsite_EF.csv"),
   row.names = FALSE
 )
 
-mass_balance <- emissions_df %>%
-  dplyr::group_by(iteration) %>%
+mass_balance <- baseline_emissions %>%
+  dplyr::group_by(onsite_EF_case, EF_onsite_tC_ha_yr, iteration) %>%
   dplyr::arrange(year, .by_group = TRUE) %>%
   dplyr::summarise(
     T = max(year),
@@ -1169,32 +1132,41 @@ mass_balance <- emissions_df %>%
     .groups = "drop"
   )
 
-cat("\n--- Mass balance check: diff should be close to 0 ---\n")
+cat("\n--- Mass balance check for off-site carbon: diff should be close to 0 ---\n")
 print(summary(mass_balance$diff))
 
 utils::write.csv(
   mass_balance,
-  file.path(output_data_dir, "emissions_mass_balance_check.csv"),
+  file.path(output_data_dir, "emissions_mass_balance_check_by_onsite_EF.csv"),
   row.names = FALSE
 )
 
-tail_share <- pv_emis %>%
+tail_share <- emissions_for_BEP_all %>%
+  dplyr::filter(scenario == "Baseline") %>%
   dplyr::mutate(
     tail_share = PV_offsite_tail / (PV_offsite_1T + PV_offsite_tail)
   )
 
-cat("\n--- PV off-site tail share ---\n")
-print(summary(tail_share$tail_share))
+cat("\n--- PV off-site tail share for baseline, by on-site EF case ---\n")
+print(
+  tail_share %>%
+    dplyr::group_by(onsite_EF_case, EF_onsite_tC_ha_yr) %>%
+    dplyr::summarise(
+      mean_tail_share = mean(tail_share, na.rm = TRUE),
+      p50_tail_share  = as.numeric(stats::quantile(tail_share, 0.50, na.rm = TRUE)),
+      .groups = "drop"
+    )
+)
 
 utils::write.csv(
   tail_share,
-  file.path(output_data_dir, "pv_offsite_tail_share.csv"),
+  file.path(output_data_dir, "pv_offsite_tail_share_by_onsite_EF.csv"),
   row.names = FALSE
 )
 
 
 # ============================================================
-# 19. Final quick checks
+# 21. Final quick checks
 # ============================================================
 
 cat("\n--- Quick simulation checks ---\n")
