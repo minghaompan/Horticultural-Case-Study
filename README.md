@@ -32,4 +32,4 @@ o	Revenue = Prices ($/t) * Yield (t)
 
 o	Variable costs = Operating costs (fuel & electricity, materials & supplies and salaries, $/t) * Yield (t)
 
-o	Net cash flow = Revenue - Variable costs - Restoration costs (in years 18 and 30) - Royalty fee - Freight costs 
+o	Net cash flow = Revenue - Variable costs - Restoration costs - Royalty fee - Freight costs 
